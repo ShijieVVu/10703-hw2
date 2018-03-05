@@ -12,6 +12,38 @@ from keras.layers import Dense, Input
 from keras.models import Model, load_model
 
 
+class ReplayMemory:
+
+    def __init__(self, memory_size=50000, burn_in=10000):
+        # The memory essentially stores transitions recorder from the agent
+        # taking actions in the environment.
+
+        # Burn in episodes define the number of episodes that are written into the memory from the
+        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced.
+        # A simple (if not the most efficient) was to implement the memory is as a list of transitions.
+        self.memory = [0] * memory_size
+        self.length = 0
+        self.memory_size = memory_size
+        self.burn_in = burn_in
+        self.full = False
+
+    def sample_batch(self, batch_size=128):
+        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples.
+        # You will feed this to your model to train.
+        if self.length >= self.burn_in or self.full:
+            return [self.memory[i] for i in random.sample(range(0, self.length) if self.full is False else range(self.memory_size), batch_size)]
+        else:
+            return []
+
+    def append(self, transition):
+        # Appends transition to the memory.
+        # print("transition is {}".format(transition))
+        self.memory[self.length] = transition
+        self.length = (self.length + 1) % self.memory_size
+        if self.length == 0:
+            self.full = True
+
+
 class QNetwork:
 
     # This class essentially defines the network architecture.
@@ -23,14 +55,13 @@ class QNetwork:
         # and optimizers here, initialize your variables, or alternately compile your model here.
         inputs = Input(shape=(ns,))
         predictions = Dense(na, use_bias=False)(inputs)
-        predictions = Dense(na, use_bias=False)(inputs)
         self.model = Model(inputs=inputs, outputs=predictions)
         adam = optimizers.Adam(lr=0.0001)
         self.model.compile(loss='mse', optimizer=adam)
         self.target_model = Model.from_config(self.model.get_config())
 
     def train(self, s, target):
-        self.model.fit(np.array([s]), np.array([target]), verbose=0)
+        self.model.fit(np.array(s), np.array(target), batch_size=len(target), verbose=0)
 
     def qvalues(self, s):
         return self.model.predict(np.array([s])).tolist()[0]
@@ -87,6 +118,7 @@ class DQNAgent:
         self.ns = env.observation_space.shape[0]
         self.na = env.action_space.n
         self.net = QNetwork(self.ns, self.na)
+        self.replay = ReplayMemory()
 
     def save_agent(self, name):
         p.dump((self.env, self.gamma, self.ns, self.na, strftime('%Y-%m-%d %H:%M:%S', localtime(int(time())))),
@@ -104,7 +136,7 @@ class DQNAgent:
     def greedy_policy(self, q_values):
         return q_values.index(max(q_values))
 
-    def train(self, case, steps, interval):
+    def train(self, iteration_number):
         # In this function, we will train our network.
         # If training without experience replay_memory, then you will interact with the environment
         # in this function, while also updating your network parameters.
@@ -112,40 +144,52 @@ class DQNAgent:
         # If you are using a replay memory, you should interact with environment here, and store these
         # transitions to memory, while also updating your model.
         iteration = 0
-        episodes = 0
+        episode = 0
+        start_training = False
         while True:
-            last = iteration
+            # print("The {}th episode".format(episode))
             self.net.update_target_weights()
             s = self.env.reset()
+            last = iteration
             while True:
+                # print("    The {}th iteration".format(iteration))
                 eps = max(0.5 - iteration / 100000, 0.05)
-                q_values = self.net.qvalues(s)
-                action = self.epsilon_greedy_policy(q_values, eps)
-                s_, r, done, info = self.env.step(action)
-                target = [0] * self.na
-                if done:
-                    target[action] = r
-                else:
-                    target[action] = r + self.gamma * max(self.net.target_values(s_))
-                self.net.train(s, target)
-                s = s_
+                a = self.epsilon_greedy_policy(self.net.qvalues(s), eps)
+                s_, r, done, _ = self.env.step(a)
+                # append experience
+                self.replay.append((s, a, r, s_, done))
+                # print("    The memory size is {}".format(self.replay.length))
+                # sample & train
+                # print("    Returned batch size is {}".format(len(self.replay.sample_batch())))
+                # print("    sample batch is {}".format(self.replay.sample_batch()))
+                batch = self.replay.sample_batch()
+                if batch:
+                    start_training = True
+                    x_train = [s1 for s1, a1, r1, s_1, done1 in batch]
+                    # print("x_train is {}".format(x_train))
+                    y_train = [[
+                        # not done -> non terminal
+                        r1 + self.gamma * max(self.net.qvalues(s_1)) if done1 is False and a2 == a1
+                        # done -> terminal
+                        else r1 if a2 == a1
+                        # not chosen action
+                        else 0
+                        # na q values
+                        for a2 in range(self.na)]
+                        for s1, a1, r1, s_1, done1 in batch]
+                    # print("y_train is {}".format(y_train))
+                    self.net.train(x_train, y_train)
                 iteration += 1
                 if done:
                     break
-            episodes += 1
-            if case == 'ite' and iteration > steps:
-                break
-            if case == 'epi' and episodes > steps:
-                break
-            # check reward
-            if case == 'ite' and int(iteration / interval) > int(last / interval):
+            episode += 1
+            if start_training and int(iteration / 100) > int(last / 100):
                 print("The {}th iteration".format(iteration))
                 self.test()
-            if case == 'epi' and episodes % interval == 0:
-                print("The {}th episodes".format(episodes))
-                self.test()
+            if iteration >= iteration_number:
+                break
 
-    def test(self, episodes=100, render=False):
+    def test(self, episodes=50, render=False):
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory.
         rewards = 0
@@ -154,7 +198,6 @@ class DQNAgent:
             while True:
                 if render:
                     self.env.render()
-                # s, r, done, _ = self.env.step(self.greedy_policy(self.net.qvalues(s)))
                 s, r, done, _ = self.env.step(self.epsilon_greedy_policy(self.net.qvalues(s), 0.05))
                 rewards += r
                 if done:
@@ -179,14 +222,14 @@ def parse_arguments():
 def main(args):
     # args = parse_arguments()
     # CartPole-v0
-    # env = gym.make("CartPole-v0")
-    # agent = DQNAgent(env, 0.99)
-    # # start = time()
-    # agent.train(case='ite', steps=1000, interval=100)
-    # # print("Time elapsed is {}".format(time() - start))
-    # agent.save_agent("cartpole_linear_model")
-    agent = load_agent("cartpole_linear_model")
-    agent.test(5, True)
+    env = gym.make("CartPole-v0")
+    agent = DQNAgent(env, 0.99)
+    start = time()
+    agent.train(10500)
+    print("Time elapsed is {}".format(time() - start))
+    agent.save_agent("cartpole_r_linear_model")
+    # agent = load_agent("cartpole_r_linear_model")
+    # agent.test(5, True)
 
 
 # You want to create an instance of the DQN_Agent class here, and then train / test it.
