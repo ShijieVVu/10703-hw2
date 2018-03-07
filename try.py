@@ -9,15 +9,15 @@ from keras.optimizers import Adam
 env = gym.make('CartPole-v0')
 ns = env.observation_space.shape[0]
 na = env.action_space.n
-model = Sequential([
-    Dense(na, input_shape=(ns,))
-])
-
 # model = Sequential([
-#     Dense(30, input_shape=(ns,), activation='relu'),
-#     Dense(30, input_shape=(30,), activation='relu'),
-#     Dense(na, input_shape=(30,), activation='linear')
+#     Dense(na, input_shape=(ns,))
 # ])
+
+model = Sequential([
+    Dense(30, input_shape=(ns,), activation='relu'),
+    Dense(30, input_shape=(30,), activation='relu'),
+    Dense(na, input_shape=(30,), activation='linear')
+])
 
 
 model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
