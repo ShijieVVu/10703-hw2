@@ -264,7 +264,7 @@ def main(args):
     # agent.save_agent("Cartpole-v0-duel")
 
     env = gym.make("MountainCar-v0")
-    agent = DQNAgent(env, gamma=0.99)
+    agent = DQNAgent(env, gamma=1)
     agent.train(case='eps', steps=10, interval=100)
     agent.save_agent("MountainCar-v0-duel")
 

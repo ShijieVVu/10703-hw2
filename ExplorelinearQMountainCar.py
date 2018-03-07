@@ -22,7 +22,7 @@ class QNetwork:
         # Define your network architecture here. It is also a good idea to define any training operations
         # and optimizers here, initialize your variables, or alternately compile your model here.
         inputs = Input(shape=(ns,))
-        predictions = Dense(na, use_bias=False)(inputs)
+        predictions = Dense(na)(inputs)
         self.model = Model(inputs=inputs, outputs=predictions)
 
         adam = optimizers.Adam(lr=0.0001)
@@ -143,36 +143,36 @@ class DQNAgent:
     def explore(self):
         iteration = 0
         best_parameter = False
-        best_score = 0
+        best_score = -500
         best = 0
         best_params = []
         M = 0.5
-        for a in np.arange(0.0, 1.0, M):
-            for b in np.arange(0.0, 1.0, M):
-                for c in np.arange(0.0, 1.0, M):
-                    for d in np.arange(0.0, 1.0, M):
-                        for e in np.arange(0.0, 1.0, M):
-                            for f in np.arange(0.0, 1.0, M):
-                                for g in np.arange(0.0, 1.0, M):
-                                    for h in np.arange(0.0, 1.0, M):
-                                        # for i in np.arange(0.0, 1.0, M):
-                                        #     for j in np.arange(0.0, 1.0, M):
-                                        self.net.model.set_weights(
-                                            [np.array([[a, b], [c, d], [e, f], [g, h]])])
-                                        score = self.test()
-                                        iteration += 1
-                                        if score >= best_score:
-                                            best_parameter = (a, b, c, d, e, f, g, h)
-                                            best_score = score
-                                            if score == 200:
-                                                best += 1
-                                                best_params.append((a, b, c, d, e, f, g, h))
-                                        if iteration % 10 == 0:
-                                            print("{}th iteration".format(iteration))
-                                            print("best parameter for now is {}".format(best_parameter))
-                                            print("best explore score for now is {}".format(best_score))
-                                            print("There are {} best solutions".format(best))
-                                            self.save_agent("explor_linear_model")
+        for a in np.arange(-0.5, 1.0, M):
+            for b in np.arange(-0.5, 1.0, M):
+                for c in np.arange(-0.5, 1.0, M):
+                    for d in np.arange(-0.5, 1.0, M):
+                        for e in np.arange(-0.5, 1.0, M):
+                            for f in np.arange(-0.5, 1.0, M):
+                                for g in np.arange(-0.5, 1.0, M):
+                                    for h in np.arange(-0.5, 1.0, M):
+                                        for i in np.arange(-0.5, 1.0, M):
+                                                self.net.model.set_weights(
+                                                    [np.array([[a, b, c], [d, e, f]]), np.array([g, h, i])])
+                                                score = self.test()
+                                                iteration += 1
+                                                if score > best_score:
+                                                    best_parameter = (a, b, c, d, e, f, g, h, i)
+                                                    best_score = score
+                                                    if score > -110:
+                                                        best += 1
+                                                        best_params.append((a, b, c, d, e, f, g, h, i))
+                                                    self.save_agent("mcexplor_linear_model")
+                                                    print("best model saved with score of {}".format(score))
+                                                if iteration % 10 == 0:
+                                                    print("{}th iteration".format(iteration))
+                                                    print("best parameter for now is {}".format(best_parameter))
+                                                    print("best explore score for now is {}".format(best_score))
+                                                    print("There are {} best solutions for now".format(best))
         print("best parameter is {}".format(best_parameter))
         print("best explore score is {}".format(best_score))
         print("There are {} best solutions".format(best))
@@ -212,16 +212,12 @@ def parse_arguments():
 def main(args):
     # args = parse_arguments()
     # CartPole-v0
-    env = gym.make("CartPole-v0")
-    agent = DQNAgent(env, 0.99)
-    agent.explore()
+    # env = gym.make("MountainCar-v0")
+    # agent = DQNAgent(env, 1)
+    # agent.explore()
 
-    # a, b, c, d, e, f, g, h, i, j = [0., 0., 0., 0., 0., 0.5, 0., 0.5, 0., 0.]
-    # agent.net.model.set_weights([np.array([[a, b], [c, d], [e, f], [g, h]]), np.array([i, j])])
-    # print(agent.test(5, True))
-
-    # agent = load_agent("explor_linear_model")
-    # agent.test(5, True)
+    agent = load_agent("mcexplor_linear_model")
+    print("Average rewards is {}".format(agent.test(5, True)))
 
 
 # You want to create an instance of the DQN_Agent class here, and then train / test it.

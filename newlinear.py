@@ -7,7 +7,7 @@ from time import strftime, localtime, time
 
 import gym
 import numpy as np
-from keras.optimizers import Adam
+from keras import optimizers, initializers
 from keras.layers import Dense, Input
 from keras.models import Model, load_model, Sequential
 
@@ -21,28 +21,17 @@ class QNetwork:
     def __init__(self, ns, na):
         # Define your network architecture here. It is also a good idea to define any training operations
         # and optimizers here, initialize your variables, or alternately compile your model here.
-        self.model = Sequential([
-            Dense(na, input_shape=(ns,))
-        ])
-
-        self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
+        inputs = Input(shape=(ns,))
+        predictions = Dense(na, activation="linear")(inputs)
+        self.model = Model(inputs=inputs, outputs=predictions)
+        adam = optimizers.Adam(lr=0.0001)
+        self.model.compile(loss='mse', optimizer=adam)
 
     def train(self, s, target):
-        def mse(A, B):
-            err = 0
-            i = 0
-            for i, (a, b) in enumerate(zip(A, B), 1):
-                err += (a - b) ** 2
-            return err / i
-
-        # print('s is {}, target is {}'.format(s, target))
-        # print("before training the mse between s and target are {}".format(mse(target, self.qvalues(s))))
-        self.model.fit(np.array(s), np.array(target), verbose=0)
-        # print("after training the mse between s and target are {}".format(mse(target, self.qvalues(s))))
+        self.model.fit(s, target, batch_size=32, verbose=0)
 
     def qvalues(self, s):
-        # print('s is {}'.format(s))
-        return self.model.predict(np.array([s])).tolist()[0]
+        return self.model.predict(s)
 
     def save_model(self, model_file):
         # Helper function to save your model / weights.
@@ -73,7 +62,7 @@ class DQNAgent:
     # (4) Create a function to test the Q Network's performance on the environment.
     # (5) Create a function for Experience Replay.
 
-    def __init__(self, env, gamma=0.99):
+    def __init__(self, env, gamma=1.0):
         # Create an instance of the network itself, as well as the memory.
         # Here is also a good place to set environmental parameters,
         # as well as training parameters - number of episodes / iterations, etc.
@@ -91,17 +80,15 @@ class DQNAgent:
     def epsilon_greedy_policy(self, q_values, eps):
         k = random.uniform(0, 1)
         if k <= eps:
-            # print("random")
-            a = random.randint(0, self.na - 1)
+            a = random.randint(0, self.env.action_space.n - 1)
         else:
-            # print("best")
             a = np.argmax(q_values)
         return a
 
     def greedy_policy(self, q_values):
         return np.argmax(q_values)
 
-    def train(self, iteration_number):
+    def train(self, case, steps, interval):
         # In this function, we will train our network.
         # If training without experience replay_memory, then you will interact with the environment
         # in this function, while also updating your network parameters.
@@ -110,68 +97,73 @@ class DQNAgent:
         # transitions to memory, while also updating your model.
         iteration = 0
         episodes = 0
-        states = []
-        while True:
-            # self.net.update_target_weights()
-            s = self.env.reset()
+        while iteration < 100000:
             last = iteration
-            train_set = []
-            while True:
-                eps = max(0.1 - 0.05 * iteration / 100000, 0.05)
-                # print("epsilon is {}".format(eps))
-                q_values = self.net.qvalues(s)
-                # print("q values are {}".format(q_values))
+            s = self.env.reset()
+            while iteration < 100000:
+                eps = max(0.5 - (iteration / 100000) * 0.45, 0.05)
+                q_values = self.net.qvalues(np.array([s]))
                 action = self.epsilon_greedy_policy(q_values, eps)
-                # print("action taken is {}".format(action))
                 s_, r, done, info = self.env.step(action)
-                # print("taking {} on state {} gives reward {} and next state {}".format(action, s, r, s_))
-                # print("prediction of next state is {}".format(self.net.qvalues(s_)))
-                if not done:
-                    q_values[action] = r + self.gamma * max(self.net.qvalues(s_))
-                else:
-                    q_values[action] = r
-                train_set.append((s, q_values))
-                # print("object q values are {}".format(q_values))
-                # self.net.train(s, q_values)
-                s = s_
-                iteration += 1
                 if done:
-                    print("hold for {} times".format(iteration - last))
+                    s_ = None
+                trans = (s, action, r, s_)
+
+                batch = [trans]
+
+                p = self.net.qvalues(np.array([i[0] for i in batch]))
+                p_ = self.net.qvalues(np.array([(i[3] if i[3] is not None else np.zeros(self.ns)) for i in batch]))
+
+                x = np.zeros((len(batch), self.ns))
+                y = np.zeros((len(batch), self.na))
+
+                for i, val in enumerate(batch):
+                    s1 = val[0]
+                    a1 = val[1]
+                    r1 = val[2]
+                    s_1 = val[3]
+
+                    if s_1 is None:
+                        p[i][a1] = r1
+                    else:
+                        p[i][a1] = r1 + self.gamma * np.max(p_[i])
+
+                    x[i] = s1
+                    y[i] = p[i]
+                self.net.train(x, y)
+                s = s_
+
+                iteration += 1
+                if iteration - last >= 200 or done:
                     break
-            x_train = [m[0] for m in train_set]
-            y_train = [m[1] for m in train_set]
-            self.net.train(x_train, y_train)
             episodes += 1
-            if iteration > iteration_number:
-                break
-            # check reward
-            if episodes % 100 == 0:
-                print("The {}th episodes and the {}th iteration".format(episodes, iteration))
-                states.append((episodes, self.test()))
-                p.dump(states, open('states.p', 'wb'))
-        print("The {}th episodes and the {}th iteration".format(episodes, iteration))
+            # if episodes > steps:
+            #     break
+            if episodes % interval == 0:
+                print("The {}th episodes".format(episodes))
+                self.test()
         self.test()
 
-    def test(self, episodes=100, render=False):
+    def test(self, episodes=20, render=False):
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory.
         rewards = 0
         for _ in range(episodes):
             s = self.env.reset()
+            steps = 0
             while True:
                 if render:
                     self.env.render()
-                s, r, done, _ = self.env.step(self.greedy_policy(self.net.qvalues(s)))
+                s, r, done, _ = self.env.step(self.greedy_policy(self.net.qvalues(np.array([s]))))
                 # s, r, done, _ = self.env.step(self.epsilon_greedy_policy(self.net.qvalues(s), 0.05))
                 rewards += r
+                steps += 1
                 if done:
+                    break
+                if steps >= 200:
                     break
         print("The average reward of {} episodes is {}".format(episodes, rewards / episodes))
         return rewards / episodes
-
-    def burn_in_memory(self):
-        # Initialize your replay memory with a burn_in number of episodes / transitions.
-        pass
 
 
 def parse_arguments():
@@ -185,12 +177,14 @@ def parse_arguments():
 
 def main(args):
     # args = parse_arguments()
-    # CartPole-v0
+    # MountainCar-v0
+    # Cartpole-v0
     env = gym.make("CartPole-v0")
-    agent = DQNAgent(env, 0.99)
-    agent.train(iteration_number=1000000)
-    agent.save_agent("cartpole_linear_model")
-    # agent = load_agent("cartpole_linear_model")
+    agent = DQNAgent(env, gamma=0.99)
+    agent.train(case='eps', steps=10, interval=100)
+    # agent.save_agent("Cartpole-v0-dqn")
+
+    # agent = load_agent("mountaincar_linear_model")
     # agent.test(5, True)
 
 
