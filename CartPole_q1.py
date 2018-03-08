@@ -18,8 +18,8 @@ model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.0001))
 
 gamma = 0.99
 eps = 0.5
-max_iteration = 10000
-interval_iteration = 1000
+max_iteration = 1000000
+interval_iteration = 10000
 i = 0
 test_size = 20
 
@@ -51,6 +51,10 @@ while i <= max_iteration:
                         if done:
                             break
                 print("The average reward of {} iteration is {}".format(i, rewards / test_size))
+            # save model
+            if i % int(max_iteration / 3) == 0:
+                model.save('./model/CartPole_q1_{}.h5'.format(i))
+                print('model saved on {} iteration'.format(i))
             if done:
                 # print("hold for {} sec".format(i - start))
                 break
