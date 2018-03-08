@@ -5,6 +5,7 @@ import numpy as np
 from keras import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
+from pickle import dump
 
 env = gym.make('CartPole-v0')
 ns = env.observation_space.shape[0]
@@ -14,23 +15,25 @@ model = Sequential([
     Dense(na, input_shape=(ns,))
 ])
 
-model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.0001))
+model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
 
 gamma = 0.99
 eps = 0.5
+eps_decay = 4.5e-6
+eps_min = 0.05
 max_iteration = 1000000
 interval_iteration = 10000
-i = 0
 test_size = 20
 
-while i <= max_iteration:
-    while i <= max_iteration:
+performance = []
+iteration = 0
+while iteration <= max_iteration:
+    while iteration <= max_iteration:
         s = env.reset()
         mini_batch = []
         while True:
-            eps = max(eps - 4.5e-6 * i, 0.05)
+            eps = max(eps - eps_decay * iteration, eps_min)
             q_values = model.predict(np.array([s]))[0]
-            start = 0
             if random() <= eps:
                 a = randint(0, na - 1)
             else:
@@ -38,23 +41,25 @@ while i <= max_iteration:
             s_, r, done, _ = env.step(a)
             mini_batch.append((s, a, r, s_, done))
             s = s_
-            i += 1
+            iteration += 1
             # test
-            if i % interval_iteration == 0:
+            if iteration % interval_iteration == 0:
                 rewards = 0
                 for _ in range(test_size):
-                    s = env.reset()
+                    s2 = env.reset()
                     while True:
-                        q_values = model.predict(np.array([s]))
-                        s, r, done, _ = env.step(np.argmax(q_values))
-                        rewards += r
-                        if done:
+                        q_values = model.predict(np.array([s2]))
+                        s2, r2, done2, _ = env.step(np.argmax(q_values))
+                        rewards += r2
+                        if done2:
                             break
-                print("The average reward of {} iteration is {}".format(i, rewards / test_size))
+                print("The average reward of {} iteration is {}".format(iteration, rewards / test_size))
+                performance.append((iteration, rewards / test_size))
+                done = True
             # save model
-            if i % int(max_iteration / 3) == 0:
-                model.save('./model/CartPole_q1_{}.h5'.format(i))
-                print('model saved on {} iteration'.format(i))
+            if iteration % int(max_iteration / 3) == 0:
+                model.save('./model/CartPole_q1_{}.h5'.format(iteration))
+                print('model saved on {} iteration'.format(iteration))
             if done:
                 # print("hold for {} sec".format(i - start))
                 break
@@ -70,3 +75,5 @@ while i <= max_iteration:
             y_train[i1] = q_values1
 
         model.fit(x_train, y_train, verbose=0)
+
+dump(performance, open('./model/CartPole_q1_performance.p', 'wb'))

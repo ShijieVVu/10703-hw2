@@ -24,7 +24,6 @@ x = []
 y = []
 for _ in range(test_size):
     s = env.reset()
-    print("initial state is {} and velocity is {}".format(s[0], s[1]))
     x.append(s[0])
     i = 0
     while True:
@@ -34,7 +33,7 @@ for _ in range(test_size):
         rewards += r
         i += 1
         if done:
-            print("hold for {} secs".format(i))
+            print("solved for {} iterations".format(i))
             break
     y.append(i)
 print("The average reward of {} episodes is {}".format(test_size, rewards / test_size))
