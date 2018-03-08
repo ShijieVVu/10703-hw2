@@ -1,18 +1,55 @@
+from random import random, randint, sample
+
 import gym
 import numpy as np
-
-from random import random, randint, sample
 from keras import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
 
-env = gym.make('CartPole-v0')
-ns = env.observation_space.shape[0]
-na = env.action_space.n
+
+class env1(type(gym.make('MountainCar-v0'))):
+    def step(self, action):
+        state, reward, done, _ = super().step(action)
+        velocity = state[1]
+        if int(action) == 0:
+            reward -= velocity * 10
+        elif int(action) == 2:
+            reward += velocity * 10
+        return state, reward, done, {}
+
+
+class env2(type(gym.make('MountainCar-v0'))):
+    def reset(self):
+        state = super().reset()
+        self.max_state0 = abs(state[0])
+        self.max_state1 = abs(state[1])
+        return state
+
+    def step(self, action):
+        state, reward, done, _ = super().step(action)
+        if abs(state[0]) > abs(self.max_state0):
+            reward += 500
+        if abs(state[1]) > abs(self.max_state1):
+            reward += 500
+        return state, reward, done, {}
+
+class env3(type(gym.make('MountainCar-v0'))):
+    def step(self, action):
+        state, reward, done, _ = super().step(action)
+        height = state[0]
+        reward += 100 * height
+        return state, reward, done, {}
+
+
+env_ = env2(gym.make('MountainCar-v0'))
+env = gym.make('MountainCar-v0')
+ns = env_.observation_space.shape[0]
+na = env_.action_space.n
 
 # model = Sequential([
 #     Dense(na, input_shape=(ns,))
 # ])
+
 
 model = Sequential([
     Dense(30, input_shape=(ns,), activation='relu'),
@@ -20,16 +57,17 @@ model = Sequential([
     Dense(na, input_shape=(30,), activation='linear')
 ])
 
+
 class Memory:
     def __init__(self, memory_size=50000, burn_in=10000):
         self.memory = []
         self.memory_size = memory_size
         # burn in
         while len(self.memory) <= burn_in:
-            s = env.reset()
+            s = env_.reset()
             while True:
-                a = env.action_space.sample()
-                s_, r, done, _ = env.step(a)
+                a = env_.action_space.sample()
+                s_, r, done, _ = env_.step(a)
                 if done:
                     s_ = None
                 self.memory.append((s, a, r, s_, done))
@@ -51,17 +89,20 @@ class Memory:
         return sample(self.memory, batch_size)
 
 
-memory = Memory()
+# memory = Memory()
 
 model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
 
 gamma = 0.99
 eps = 0.5
 episodes = 100
+test_size = 5
+render = True
+solvable = -110
 for j in range(10000):
     for e in range(episodes):
-        s = env.reset()
-        # mini_batch = []
+        s = env_.reset()
+        mini_batch = []
         i = 0
         while True:
             q_values = model.predict(np.array([s]))[0]
@@ -70,16 +111,16 @@ for j in range(10000):
                 a = randint(0, na - 1)
             else:
                 a = np.argmax(q_values)
-            s_, r, done, _ = env.step(a)
-            # mini_batch.append((s, a, r, s_, done))
-            memory.remember((s, a, r, s_, done))
+            s_, r, done, _ = env_.step(a)
+            mini_batch.append((s, a, r, s_, done))
+            # memory.remember((s, a, r, s_, done))
             s = s_
             i += 1
             if done:
                 # print("hold for {} sec".format(i))
                 break
         eps *= 0.99997
-        mini_batch = memory.sample()
+        # mini_batch = memory.sample()
         x_train = np.zeros((len(mini_batch), ns))
         y_train = np.zeros((len(mini_batch), na))
         for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
@@ -94,18 +135,19 @@ for j in range(10000):
         model.fit(x_train, y_train, verbose=0)
 
     rewards = 0
-    for _ in range(20):
+    for _ in range(test_size):
         s = env.reset()
         while True:
-            # env.render()
+            if render:
+                env.render()
             q_values = model.predict(np.array([s]))
             s, r, done, _ = env.step(np.argmax(q_values))
             rewards += r
             if done:
                 break
-    print("The average reward of {} episodes is {}".format(episodes, rewards / 20))
+    print("The average reward of {} episodes is {}".format(episodes, rewards / test_size))
 
-    if rewards / 20 >= 195:
-        print("env solved after {} episodes".format(j * 100))
+    if rewards / test_size >= solvable:
+        print("env solved after {} episodes".format(j * episodes))
         model.save('tryout.h5')
         break
