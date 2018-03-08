@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 
-from random import random, randint
+from random import random, randint, sample
 from keras import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
@@ -20,6 +20,38 @@ model = Sequential([
 #     Dense(na, input_shape=(30,), activation='linear')
 # ])
 
+class Memory:
+    def __init__(self, memory_size=50000, burn_in=10000):
+        self.memory = []
+        self.memory_size = memory_size
+        # burn in
+        while len(self.memory) <= burn_in:
+            s = env.reset()
+            while True:
+                a = env.action_space.sample()
+                s_, r, done, _ = env.step(a)
+                if done:
+                    s_ = None
+                self.memory.append((s, a, r, s_, done))
+                if done:
+                    break
+        self.index = burn_in - 1
+
+    def remember(self, c):
+        if len(self.memory) < self.memory_size:
+            self.memory.append(c)
+            self.index = (self.index + 1) % self.memory_size
+        elif len(self.memory) == self.memory_size:
+            self.memory[self.index] = c
+            self.index = (self.index + 1) % self.memory_size
+        else:
+            print("Wrong")
+
+    def sample(self, batch_size=32):
+        return sample(self.memory, batch_size)
+
+
+memory = Memory()
 
 model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
 
@@ -29,7 +61,7 @@ episodes = 100
 for j in range(10000):
     for e in range(episodes):
         s = env.reset()
-        mini_batch = []
+        # mini_batch = []
         i = 0
         while True:
             q_values = model.predict(np.array([s]))[0]
@@ -39,18 +71,15 @@ for j in range(10000):
             else:
                 a = np.argmax(q_values)
             s_, r, done, _ = env.step(a)
-            if not done:
-                # print("in {}".format(s_))
-                q_values[a] = r + gamma * np.max(model.predict(np.array([s_])))
-            else:
-                q_values[a] = r
-            mini_batch.append((s, a, r, s_, done))
+            # mini_batch.append((s, a, r, s_, done))
+            memory.remember((s, a, r, s_, done))
             s = s_
             i += 1
             if done:
                 # print("hold for {} sec".format(i))
                 break
         eps *= 0.99997
+        mini_batch = memory.sample()
         x_train = np.zeros((len(mini_batch), ns))
         y_train = np.zeros((len(mini_batch), na))
         for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
