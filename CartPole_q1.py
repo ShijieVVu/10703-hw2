@@ -14,36 +14,32 @@ model = Sequential([
     Dense(na, input_shape=(ns,))
 ])
 
-model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
+model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.0001))
 
 gamma = 0.99
 eps = 0.5
 episodes = 100
-for j in range(10000):
+i = 0
+max_iteration = 1000000
+while i <= max_iteration:
     for e in range(episodes):
         s = env.reset()
         mini_batch = []
-        i = 0
         while True:
+            eps = max(eps - 4.5e-6 * i, 0.05)
             q_values = model.predict(np.array([s]))[0]
-            # print("q_values is {}".format(q_values))
+            start = 0
             if random() <= eps:
                 a = randint(0, na - 1)
             else:
                 a = np.argmax(q_values)
             s_, r, done, _ = env.step(a)
-            if not done:
-                # print("in {}".format(s_))
-                q_values[a] = r + gamma * np.max(model.predict(np.array([s_])))
-            else:
-                q_values[a] = r
             mini_batch.append((s, a, r, s_, done))
             s = s_
             i += 1
             if done:
-                # print("hold for {} sec".format(i))
+                print("hold for {} sec".format(i - start))
                 break
-        eps *= 0.99997
         x_train = np.zeros((len(mini_batch), ns))
         y_train = np.zeros((len(mini_batch), na))
         for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):

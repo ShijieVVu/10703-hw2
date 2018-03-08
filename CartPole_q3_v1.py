@@ -7,9 +7,10 @@ from time import strftime, localtime, time
 
 import gym
 import numpy as np
-from keras import optimizers, initializers
-from keras.layers import Dense, Input
-from keras.models import Model, load_model, Sequential
+from keras import optimizers
+from keras.layers import Dense
+from keras.models import load_model, Sequential
+
 
 class ReplayMemory:
 
