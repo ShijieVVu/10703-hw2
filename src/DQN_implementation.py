@@ -36,42 +36,44 @@ class QNetwork:
         self.model.save('./model/{}_{}.h5'.format(name, iteration))
         print('model saved to ./model/{}_{}.h5 on {} iteration'.format(name, iteration, iteration))
 
-    def train(self, x_train, y_train):
-        self.model.fit(x_train, y_train, verbose=0)
+    def train(self, x_train, y_train, batch_size):
+        self.model.fit(x_train, y_train, batch_size=batch_size, verbose=0)
 
     def qvalues(self, s):
-        return self.model.predict(np.array([s]))[0]
+        return self.model.predict(s)
 
 
 class Memory:
     def __init__(self, environment_name, memory_size=50000, burn_in=10000):
         self.memory = []
+        self.length = 0
         self.memory_size = memory_size
+        self.burn_in = burn_in
+        self.full = False
         # burn in
         env = gym.make(environment_name)
-        while len(self.memory) <= burn_in:
+        iteration = 0
+        while iteration <= burn_in:
             s = env.reset()
             while True:
                 a = env.action_space.sample()
                 s_, r, done, _ = env.step(a)
-                if done:
-                    s_ = None
-                self.memory.append((s, a, r, s_, done))
+                self.remember((s, a, r, s_, done))
+                s = s_
+                iteration += 1
                 if done:
                     break
-        self.index = burn_in - 1
-        print("Memory burned in with current index at {}".format(self.index))
+        print("Memory burned in with current index at {}".format(self.length))
         print("Memory size is {}".format(self.memory_size))
 
-    def remember(self, c):
-        if len(self.memory) < self.memory_size:
-            self.memory.append(c)
-            self.index = (self.index + 1) % self.memory_size
-        elif len(self.memory) == self.memory_size:
-            self.memory[self.index] = c
-            self.index = (self.index + 1) % self.memory_size
+    def remember(self, transition):
+        if self.full:
+            self.memory[self.length] = transition
         else:
-            print("Wrong")
+            self.memory.append(transition)
+        self.length = (self.length + 1) % self.memory_size
+        if self.length == 0:
+            self.full = True
 
     def sample(self, batch_size=32):
         return sample(self.memory, batch_size)
@@ -104,48 +106,69 @@ class DQN_Agent:
         performance = []
         while iteration <= max_iteration:
             while iteration <= max_iteration:
+                start = iteration
                 s = self.env.reset()
                 if not self.use_replay:
                     mini_batch = []
                 while True:
                     eps = max(eps - eps_decay * iteration, eps_min)
-                    q_values = self.net.qvalues(s)
+                    q_values = self.net.qvalues(np.array([s]))
                     a = self.epsilon_greedy_policy(q_values, eps)
                     s_, r, done, _ = self.env.step(a)
                     if not self.use_replay:
                         mini_batch.append((s, a, r, s_, done))
                     else:
+                        mini_batch = self.memory.sample()
                         self.memory.remember((s, a, r, s_, done))
+
+                        p = self.net.qvalues(np.array([i[0] for i in mini_batch]))
+                        p_ = self.net.qvalues(
+                            np.array([(i[3] if i[4] is not None else np.zeros(self.ns)) for i in mini_batch]))
+
+                        x = np.zeros((len(mini_batch), self.ns))
+                        y = np.zeros((len(mini_batch), self.na))
+
+                        for i, val in enumerate(mini_batch):
+                            s1 = val[0]
+                            a1 = val[1]
+                            r1 = val[2]
+                            done1 = val[4]
+
+                            if done1:
+                                p[i][a1] = r1
+                            else:
+                                p[i][a1] = r1 + gamma * np.max(p_[i])
+
+                            x[i] = s1
+                            y[i] = p[i]
+                        self.net.train(x, y, len(mini_batch))
+
                     s = s_
                     iteration += 1
                     # test
                     if iteration % interval_iteration == 0:
                         performance.append((iteration, self.test(iteration, test_size=test_size)))
-                        done = True
+                        break
                     # save model
                     if iteration % int(max_iteration / 3) == 0:
                         self.net.save_model(self.identifier, iteration)
-                        # env state has changed
-                        done = True
+                        break
                     if done:
                         # print("hold for {} sec".format(i - start))
                         break
 
-                if self.use_replay:
-                    mini_batch = self.memory.sample()
-
-                x_train = np.zeros((len(mini_batch), self.ns))
-                y_train = np.zeros((len(mini_batch), self.na))
-                for i1, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
-                    q_values1 = self.net.qvalues(s1)
-                    if done:
-                        q_values1[a1] = r1
-                    else:
-                        q_values1[a1] = r1 + gamma * np.max(self.net.qvalues(s_1))
-                    x_train[i1] = s1
-                    y_train[i1] = q_values1
-
-                self.net.train(x_train, y_train)
+                if not self.use_replay:
+                    x_train = np.zeros((len(mini_batch), self.ns))
+                    y_train = np.zeros((len(mini_batch), self.na))
+                    for i1, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
+                        q_values1 = self.net.qvalues(np.array([s1]))
+                        if done:
+                            q_values1[a1] = r1
+                        else:
+                            q_values1[a1] = r1 + gamma * np.max(self.net.qvalues(np.array([s_1])))
+                        x_train[i1] = s1
+                        y_train[i1] = q_values1
+                    self.net.train(x_train, y_train, len(mini_batch))
         dump(performance, open('./model/{}.p'.format(self.identifier), 'wb'))
 
     def test(self, iteration, test_size):
@@ -153,7 +176,7 @@ class DQN_Agent:
         for _ in range(test_size):
             s2 = self.env.reset()
             while True:
-                q_values = self.net.qvalues(s2)
+                q_values = self.net.qvalues(np.array([s2]))
                 s2, r2, done2, _ = self.env.step(np.argmax(q_values))
                 rewards += r2
                 if done2:
