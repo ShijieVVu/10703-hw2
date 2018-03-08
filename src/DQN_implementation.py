@@ -14,11 +14,22 @@ class QNetwork:
 
     def __init__(self, ns, na, identifier, learning_rate):
         self.model = None
+        # linear model
         if identifier == "CartPole_q1" or "CartPole_q2":
             self.model = Sequential([
                 Dense(na, input_shape=(ns,))
             ])
+            self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
+        # MLP
+        if identifier == "CartPole_q3":
+            self.model = Sequential([
+                Dense(30, input_shape=(ns,), activation='relu'),
+                Dense(30, input_shape=(30,), activation='relu'),
+                Dense(30, input_shape=(30,), activation='relu'),
+                Dense(30, input_shape=(30,), activation='relu'),
+                Dense(na, input_shape=(30,))
+            ])
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
     def save_model(self, name, iteration):
@@ -49,6 +60,8 @@ class Memory:
                 if done:
                     break
         self.index = burn_in - 1
+        print("Memory burned in with current index at {}".format(self.index))
+        print("Memory size is {}".format(self.memory_size))
 
     def remember(self, c):
         if len(self.memory) < self.memory_size:
