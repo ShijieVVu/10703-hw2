@@ -6,55 +6,12 @@ from keras import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
 
-
-class env1(type(gym.make('MountainCar-v0'))):
-    def step(self, action):
-        state, reward, done, _ = super().step(action)
-        velocity = state[1]
-        if int(action) == 0:
-            reward -= velocity * 10
-        elif int(action) == 2:
-            reward += velocity * 10
-        return state, reward, done, {}
-
-
-class env2(type(gym.make('MountainCar-v0'))):
-    def reset(self):
-        state = super().reset()
-        self.max_state0 = abs(state[0])
-        self.max_state1 = abs(state[1])
-        return state
-
-    def step(self, action):
-        state, reward, done, _ = super().step(action)
-        if abs(state[0]) > abs(self.max_state0):
-            reward += 500
-        if abs(state[1]) > abs(self.max_state1):
-            reward += 500
-        return state, reward, done, {}
-
-class env3(type(gym.make('MountainCar-v0'))):
-    def step(self, action):
-        state, reward, done, _ = super().step(action)
-        height = state[0]
-        reward += 100 * height
-        return state, reward, done, {}
-
-
-env_ = env2(gym.make('MountainCar-v0'))
-env = gym.make('MountainCar-v0')
-ns = env_.observation_space.shape[0]
-na = env_.action_space.n
-
-# model = Sequential([
-#     Dense(na, input_shape=(ns,))
-# ])
-
+env = gym.make('CartPole-v0')
+ns = env.observation_space.shape[0]
+na = env.action_space.n
 
 model = Sequential([
-    Dense(30, input_shape=(ns,), activation='relu'),
-    Dense(30, input_shape=(30,), activation='relu'),
-    Dense(na, input_shape=(30,), activation='linear')
+    Dense(na, input_shape=(ns,))
 ])
 
 
@@ -64,10 +21,10 @@ class Memory:
         self.memory_size = memory_size
         # burn in
         while len(self.memory) <= burn_in:
-            s = env_.reset()
+            s = env.reset()
             while True:
-                a = env_.action_space.sample()
-                s_, r, done, _ = env_.step(a)
+                a = env.action_space.sample()
+                s_, r, done, _ = env.step(a)
                 if done:
                     s_ = None
                 self.memory.append((s, a, r, s_, done))
@@ -89,38 +46,32 @@ class Memory:
         return sample(self.memory, batch_size)
 
 
-# memory = Memory()
+memory = Memory()
 
 model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
 
 gamma = 0.99
 eps = 0.5
 episodes = 100
-test_size = 5
-render = True
-solvable = -110
 for j in range(10000):
     for e in range(episodes):
-        s = env_.reset()
-        mini_batch = []
+        s = env.reset()
         i = 0
         while True:
             q_values = model.predict(np.array([s]))[0]
-            # print("q_values is {}".format(q_values))
             if random() <= eps:
                 a = randint(0, na - 1)
             else:
                 a = np.argmax(q_values)
-            s_, r, done, _ = env_.step(a)
-            mini_batch.append((s, a, r, s_, done))
-            # memory.remember((s, a, r, s_, done))
+            s_, r, done, _ = env.step(a)
+            memory.remember((s, a, r, s_, done))
             s = s_
             i += 1
             if done:
                 # print("hold for {} sec".format(i))
                 break
         eps *= 0.99997
-        # mini_batch = memory.sample()
+        mini_batch = memory.sample()
         x_train = np.zeros((len(mini_batch), ns))
         y_train = np.zeros((len(mini_batch), na))
         for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
@@ -135,19 +86,18 @@ for j in range(10000):
         model.fit(x_train, y_train, verbose=0)
 
     rewards = 0
-    for _ in range(test_size):
+    for _ in range(20):
         s = env.reset()
         while True:
-            if render:
-                env.render()
+            # env.render()
             q_values = model.predict(np.array([s]))
             s, r, done, _ = env.step(np.argmax(q_values))
             rewards += r
             if done:
                 break
-    print("The average reward of {} episodes is {}".format(episodes, rewards / test_size))
+    print("The average reward of {} episodes is {}".format(episodes, rewards / 20))
 
-    if rewards / test_size >= solvable:
-        print("env solved after {} episodes".format(j * episodes))
+    if rewards / 20 >= 195:
+        print("env solved after {} episodes".format(j * 100))
         model.save('tryout.h5')
         break

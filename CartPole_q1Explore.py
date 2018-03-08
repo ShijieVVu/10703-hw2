@@ -12,38 +12,6 @@ from keras.layers import Dense, Input
 from keras.models import Model, load_model
 
 
-class ReplayMemory:
-
-    def __init__(self, memory_size=50000, burn_in=10000):
-        # The memory essentially stores transitions recorder from the agent
-        # taking actions in the environment.
-
-        # Burn in episodes define the number of episodes that are written into the memory from the
-        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced.
-        # A simple (if not the most efficient) was to implement the memory is as a list of transitions.
-        self.memory = [0] * memory_size
-        self.length = 0
-        self.memory_size = memory_size
-        self.burn_in = burn_in
-        self.full = False
-
-    def sample_batch(self, batch_size=128):
-        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples.
-        # You will feed this to your model to train.
-        if self.length >= self.burn_in or self.full:
-            return [self.memory[i] for i in random.sample(range(0, self.length) if self.full is False else range(self.memory_size), batch_size)]
-        else:
-            return []
-
-    def append(self, transition):
-        # Appends transition to the memory.
-        # print("transition is {}".format(transition))
-        self.memory[self.length] = transition
-        self.length = (self.length + 1) % self.memory_size
-        if self.length == 0:
-            self.full = True
-
-
 class QNetwork:
 
     # This class essentially defines the network architecture.
@@ -56,14 +24,17 @@ class QNetwork:
         inputs = Input(shape=(ns,))
         predictions = Dense(na, use_bias=False)(inputs)
         self.model = Model(inputs=inputs, outputs=predictions)
+
         adam = optimizers.Adam(lr=0.0001)
-        self.model.compile(loss='mse', optimizer=adam)
+        self.model.compile(loss='mean_squared_error', optimizer=adam)
+        # self.target_model = Model.from_config(self.model.get_config())
         self.target_model = Model.from_config(self.model.get_config())
 
     def train(self, s, target):
-        self.model.fit(np.array(s), np.array(target), batch_size=len(target), verbose=0)
+        self.model.fit(np.array([s]), np.array([target]), verbose=0)
 
     def qvalues(self, s):
+        # print("weights used for prediction is {}".format(self.model.get_weights()))
         return self.model.predict(np.array([s])).tolist()[0]
 
     def target_values(self, s):
@@ -118,7 +89,6 @@ class DQNAgent:
         self.ns = env.observation_space.shape[0]
         self.na = env.action_space.n
         self.net = QNetwork(self.ns, self.na)
-        self.replay = ReplayMemory()
 
     def save_agent(self, name):
         p.dump((self.env, self.gamma, self.ns, self.na, strftime('%Y-%m-%d %H:%M:%S', localtime(int(time())))),
@@ -128,7 +98,7 @@ class DQNAgent:
     def epsilon_greedy_policy(self, q_values, eps):
         k = random.uniform(0, 1)
         if k <= eps:
-            a = random.randint(0, self.env.action_space.n - 1)
+            a = random.randint(0, self.na - 1)
         else:
             a = q_values.index(max(q_values))
         return a
@@ -144,52 +114,69 @@ class DQNAgent:
         # If you are using a replay memory, you should interact with environment here, and store these
         # transitions to memory, while also updating your model.
         iteration = 0
-        episode = 0
-        start_training = False
+        episodes = 0
         while True:
-            # print("The {}th episode".format(episode))
             self.net.update_target_weights()
             s = self.env.reset()
-            last = iteration
+            start = iteration
             while True:
-                # print("    The {}th iteration".format(iteration))
-                eps = max(0.5 - iteration / 100000, 0.05)
-                a = self.epsilon_greedy_policy(self.net.qvalues(s), eps)
-                s_, r, done, _ = self.env.step(a)
-                # append experience
-                self.replay.append((s, a, r, s_, done))
-                # print("    The memory size is {}".format(self.replay.length))
-                # sample & train
-                # print("    Returned batch size is {}".format(len(self.replay.sample_batch())))
-                # print("    sample batch is {}".format(self.replay.sample_batch()))
-                batch = self.replay.sample_batch()
-                if batch:
-                    start_training = True
-                    x_train = [s1 for s1, a1, r1, s_1, done1 in batch]
-                    # print("x_train is {}".format(x_train))
-                    y_train = [[
-                        # not done -> non terminal
-                        r1 + self.gamma * max(self.net.qvalues(s_1)) if done1 is False and a2 == a1
-                        # done -> terminal
-                        else r1 if a2 == a1
-                        # not chosen action
-                        else 0
-                        # na q values
-                        for a2 in range(self.na)]
-                        for s1, a1, r1, s_1, done1 in batch]
-                    # print("y_train is {}".format(y_train))
-                    self.net.train(x_train, y_train)
+                eps = max(0.5 - 0.45 * iteration / 100000, 0.05)
+                q_values = self.net.qvalues(s)
+                action = self.epsilon_greedy_policy(q_values, eps)
+                s_, r, done, info = self.env.step(action)
+                q_values[action] = r + self.gamma * max(self.net.target_values(s_)) if not done else r
+                self.net.train(s, q_values)
+                s = s_
                 iteration += 1
-                if done:
+                if done or iteration - start > 200:
                     break
-            episode += 1
-            if start_training and int(iteration / 100) > int(last / 100):
-                print("The {}th iteration".format(iteration))
-                self.test()
-            if iteration >= iteration_number:
+            episodes += 1
+            if iteration > iteration_number:
                 break
+            # check reward
+            if episodes % 100 == 0:
+                print("The {}th episodes and the {}th iteration".format(episodes, iteration))
+                self.test()
+        print("The {}th episodes and the {}th iteration".format(episodes, iteration))
+        self.test()
 
-    def test(self, episodes=50, render=False):
+    def explore(self):
+        iteration = 0
+        best_parameter = False
+        best_score = 0
+        best = 0
+        best_params = []
+        M = 0.5
+        for a in np.arange(0.0, 1.0, M):
+            for b in np.arange(0.0, 1.0, M):
+                for c in np.arange(0.0, 1.0, M):
+                    for d in np.arange(0.0, 1.0, M):
+                        for e in np.arange(0.0, 1.0, M):
+                            for f in np.arange(0.0, 1.0, M):
+                                for g in np.arange(0.0, 1.0, M):
+                                    for h in np.arange(0.0, 1.0, M):
+                                        self.net.model.set_weights(
+                                            [np.array([[a, b], [c, d], [e, f], [g, h]])])
+                                        score = self.test()
+                                        iteration += 1
+                                        if score >= best_score:
+                                            best_parameter = (a, b, c, d, e, f, g, h)
+                                            best_score = score
+                                            if score == 200:
+                                                best += 1
+                                                best_params.append((a, b, c, d, e, f, g, h))
+                                        if iteration % 10 == 0:
+                                            print("{}th iteration".format(iteration))
+                                            print("best parameter for now is {}".format(best_parameter))
+                                            print("best explore score for now is {}".format(best_score))
+                                            print("There are {} best solutions".format(best))
+                                            self.save_agent("explor_linear_model")
+        print("best parameter is {}".format(best_parameter))
+        print("best explore score is {}".format(best_score))
+        print("There are {} best solutions".format(best))
+        print("Best solutions are {}".format(best_params))
+
+    def test(self, episodes=20, render=False):
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory.
         rewards = 0
@@ -198,11 +185,12 @@ class DQNAgent:
             while True:
                 if render:
                     self.env.render()
-                s, r, done, _ = self.env.step(self.epsilon_greedy_policy(self.net.qvalues(s), 0.05))
+                s, r, done, _ = self.env.step(self.greedy_policy(self.net.qvalues(s)))
+                # s, r, done, _ = self.env.step(self.epsilon_greedy_policy(self.net.qvalues(s), 0.05))
                 rewards += r
                 if done:
                     break
-        print("The average reward of {} episodes is {}".format(episodes, rewards / episodes))
+        # print("The average reward of {} episodes is {}".format(episodes, rewards / episodes))
         return rewards / episodes
 
     def burn_in_memory(self):
@@ -224,11 +212,9 @@ def main(args):
     # CartPole-v0
     env = gym.make("CartPole-v0")
     agent = DQNAgent(env, 0.99)
-    start = time()
-    agent.train(10500)
-    print("Time elapsed is {}".format(time() - start))
-    agent.save_agent("cartpole_r_linear_model")
-    # agent = load_agent("cartpole_r_linear_model")
+    agent.explore()
+
+    # agent = load_agent("explor_linear_model")
     # agent.test(5, True)
 
 
