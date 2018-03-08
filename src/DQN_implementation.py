@@ -1,8 +1,7 @@
 #!/usr/bin/env python
-from random import random, randint
+from random import random, randint, sample
 
 import argparse
-import sys
 import gym
 import numpy as np
 from keras import Sequential
@@ -11,16 +10,20 @@ from keras.optimizers import Adam
 from pickle import dump
 
 
-class QNetwork():
+class QNetwork:
 
-    def __init__(self, ns, na):
-        self.model = Sequential([
-            Dense(na, input_shape=(ns,))
-        ])
+    def __init__(self, ns, na, identifier, learning_rate):
+        self.model = None
+        if identifier == "CartPole_q1" or "CartPole_q2":
+            self.model = Sequential([
+                Dense(na, input_shape=(ns,))
+            ])
+
+            self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
     def save_model(self, name, iteration):
         self.model.save('./model/{}_{}.h5'.format(name, iteration))
-        print('model saved on {} iteration'.format(iteration))
+        print('model saved to ./model/{}_{}.h5 on {} iteration'.format(name, iteration, iteration))
 
     def train(self, x_train, y_train):
         self.model.fit(x_train, y_train, verbose=0)
@@ -29,27 +32,50 @@ class QNetwork():
         return self.model.predict(np.array([s]))[0]
 
 
-class Replay_Memory():
+class Memory:
+    def __init__(self, environment_name, memory_size=50000, burn_in=10000):
+        self.memory = []
+        self.memory_size = memory_size
+        # burn in
+        env = gym.make(environment_name)
+        while len(self.memory) <= burn_in:
+            s = env.reset()
+            while True:
+                a = env.action_space.sample()
+                s_, r, done, _ = env.step(a)
+                if done:
+                    s_ = None
+                self.memory.append((s, a, r, s_, done))
+                if done:
+                    break
+        self.index = burn_in - 1
 
-    def __init__(self, memory_size=50000, burn_in=10000):
-        pass
+    def remember(self, c):
+        if len(self.memory) < self.memory_size:
+            self.memory.append(c)
+            self.index = (self.index + 1) % self.memory_size
+        elif len(self.memory) == self.memory_size:
+            self.memory[self.index] = c
+            self.index = (self.index + 1) % self.memory_size
+        else:
+            print("Wrong")
 
-    def sample_batch(self, batch_size=32):
-        pass
-
-    def append(self, transition):
-        pass
+    def sample(self, batch_size=32):
+        return sample(self.memory, batch_size)
 
 
-class DQN_Agent():
+class DQN_Agent:
 
-    def __init__(self, environment_name, identifier=None):
+    def __init__(self, environment_name, identifier, learning_rate, use_replay_memory):
         self.identifier = identifier
-        self.net = QNetwork(environment_name, identifier)
         self.env_name = environment_name
         self.env = gym.make(self.env_name)
         self.na = self.env.action_space.n
         self.ns = self.env.observation_space.shape[0]
+        self.net = QNetwork(self.ns, self.na, identifier, learning_rate)
+        if use_replay_memory:
+            self.memory = Memory(environment_name)
+        self.use_replay = use_replay_memory
 
     def epsilon_greedy_policy(self, q_values, eps):
         if random() <= eps:
@@ -60,20 +86,23 @@ class DQN_Agent():
     def greedy_policy(self, q_values):
         pass
 
-    def train(self, max_iteration=None, eps=None, eps_decay=None, eps_min=None, interval_iteration=None, gamma=None,
-              test_size=None):
+    def train(self, max_iteration, eps, eps_decay, eps_min, interval_iteration, gamma, test_size):
         iteration = 0
         performance = []
         while iteration <= max_iteration:
             while iteration <= max_iteration:
                 s = self.env.reset()
-                mini_batch = []
+                if not self.use_replay:
+                    mini_batch = []
                 while True:
                     eps = max(eps - eps_decay * iteration, eps_min)
                     q_values = self.net.qvalues(s)
                     a = self.epsilon_greedy_policy(q_values, eps)
                     s_, r, done, _ = self.env.step(a)
-                    mini_batch.append((s, a, r, s_, done))
+                    if not self.use_replay:
+                        mini_batch.append((s, a, r, s_, done))
+                    else:
+                        self.memory.remember((s, a, r, s_, done))
                     s = s_
                     iteration += 1
                     # test
@@ -83,9 +112,15 @@ class DQN_Agent():
                     # save model
                     if iteration % int(max_iteration / 3) == 0:
                         self.net.save_model(self.identifier, iteration)
+                        # env state has changed
+                        done = True
                     if done:
                         # print("hold for {} sec".format(i - start))
                         break
+
+                if self.use_replay:
+                    mini_batch = self.memory.sample()
+
                 x_train = np.zeros((len(mini_batch), self.ns))
                 y_train = np.zeros((len(mini_batch), self.na))
                 for i1, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
@@ -98,23 +133,20 @@ class DQN_Agent():
                     y_train[i1] = q_values1
 
                 self.net.train(x_train, y_train)
-        return performance
+        dump(performance, open('./model/{}.p'.format(self.identifier), 'wb'))
 
-    def test(self, iteration, test_size=None):
-        env = gym.make(self.env_name)
+    def test(self, iteration, test_size):
         rewards = 0
         for _ in range(test_size):
-            s2 = env.reset()
+            s2 = self.env.reset()
             while True:
                 q_values = self.net.qvalues(s2)
-                s2, r2, done2, _ = env.step(np.argmax(q_values))
+                s2, r2, done2, _ = self.env.step(np.argmax(q_values))
                 rewards += r2
                 if done2:
                     break
         print("The average reward of {} iteration is {}".format(iteration, rewards / test_size))
-
-    def burn_in_memory(self):
-        pass
+        return rewards / test_size
 
 
 def parse_arguments():
@@ -134,12 +166,8 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main(args):
-    args = parse_arguments()
-    agent = DQN_Agent(args.env, args.identifier)
-    agent.train(max_iteration=args.max_iteration, eps=args.epsilon, eps_decay=args.epsilon_decay,
-                eps_min=args.epsilon_min, interval_iteration=args.interval_iteration, test_size=args.test_size)
-
-
-if __name__ == '__main__':
-    main(sys.argv)
+def main(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
+         test_size, learning_rate, use_replay_memory):
+    agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate, use_replay_memory=use_replay_memory)
+    agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
+                eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size)
