@@ -9,15 +9,16 @@ from keras.optimizers import Adam
 env = gym.make('CartPole-v0')
 ns = env.observation_space.shape[0]
 na = env.action_space.n
-# model = Sequential([
-#     Dense(na, input_shape=(ns,))
-# ])
 
 model = Sequential([
-    Dense(30, input_shape=(ns,), activation='relu'),
-    Dense(30, input_shape=(30,), activation='relu'),
-    Dense(na, input_shape=(30,), activation='linear')
+    Dense(na, input_shape=(ns,))
 ])
+
+# model = Sequential([
+#     Dense(30, input_shape=(ns,), activation='relu'),
+#     Dense(30, input_shape=(30,), activation='relu'),
+#     Dense(na, input_shape=(30,), activation='linear')
+# ])
 
 
 model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.001))
@@ -39,18 +40,28 @@ for j in range(10000):
                 a = np.argmax(q_values)
             s_, r, done, _ = env.step(a)
             if not done:
+                # print("in {}".format(s_))
                 q_values[a] = r + gamma * np.max(model.predict(np.array([s_])))
             else:
                 q_values[a] = r
-            mini_batch.append((s, q_values))
+            mini_batch.append((s, a, r, s_, done))
             s = s_
             i += 1
             if done:
                 # print("hold for {} sec".format(i))
                 break
         eps *= 0.99997
-        x_train = np.array([m[0] for m in mini_batch])
-        y_train = np.array([m[1] for m in mini_batch])
+        x_train = np.zeros((len(mini_batch), ns))
+        y_train = np.zeros((len(mini_batch), na))
+        for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
+            q_values1 = model.predict(np.array([s1]))[0]
+            if done:
+                q_values1[a1] = r1
+            else:
+                q_values1[a1] = r1 + gamma * np.max(model.predict(np.array([s_1])))
+            x_train[i] = s1
+            y_train[i] = q_values1
+
         model.fit(x_train, y_train, verbose=0)
 
     rewards = 0

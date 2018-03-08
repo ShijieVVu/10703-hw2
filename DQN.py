@@ -169,7 +169,7 @@ class DQNAgent:
 
                 x = np.zeros((len(batch), self.ns))
                 y = np.zeros((len(batch), self.na))
-
+                print(x.shape)
                 for i, val in enumerate(batch):
                     s1 = val[0]
                     a1 = val[1]
