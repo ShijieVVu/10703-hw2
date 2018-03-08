@@ -18,11 +18,13 @@ model.compile(loss='mean_squared_error', optimizer=Adam(lr=0.0001))
 
 gamma = 0.99
 eps = 0.5
-episodes = 100
+max_iteration = 10000
+interval_iteration = 1000
 i = 0
-max_iteration = 1000000
+test_size = 20
+
 while i <= max_iteration:
-    for e in range(episodes):
+    while i <= max_iteration:
         s = env.reset()
         mini_batch = []
         while True:
@@ -37,34 +39,30 @@ while i <= max_iteration:
             mini_batch.append((s, a, r, s_, done))
             s = s_
             i += 1
+            # test
+            if i % interval_iteration == 0:
+                rewards = 0
+                for _ in range(test_size):
+                    s = env.reset()
+                    while True:
+                        q_values = model.predict(np.array([s]))
+                        s, r, done, _ = env.step(np.argmax(q_values))
+                        rewards += r
+                        if done:
+                            break
+                print("The average reward of {} iteration is {}".format(i, rewards / test_size))
             if done:
-                print("hold for {} sec".format(i - start))
+                # print("hold for {} sec".format(i - start))
                 break
         x_train = np.zeros((len(mini_batch), ns))
         y_train = np.zeros((len(mini_batch), na))
-        for i, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
+        for i1, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
             q_values1 = model.predict(np.array([s1]))[0]
             if done:
                 q_values1[a1] = r1
             else:
                 q_values1[a1] = r1 + gamma * np.max(model.predict(np.array([s_1])))
-            x_train[i] = s1
-            y_train[i] = q_values1
+            x_train[i1] = s1
+            y_train[i1] = q_values1
 
         model.fit(x_train, y_train, verbose=0)
-
-    rewards = 0
-    for _ in range(20):
-        s = env.reset()
-        while True:
-            q_values = model.predict(np.array([s]))
-            s, r, done, _ = env.step(np.argmax(q_values))
-            rewards += r
-            if done:
-                break
-    print("The average reward of {} episodes is {}".format(episodes, rewards / 20))
-
-    if rewards / 20 >= 195:
-        print("env solved after {} episodes".format(j * 100))
-        model.save('tryout.h5')
-        break
