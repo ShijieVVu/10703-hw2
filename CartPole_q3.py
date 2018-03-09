@@ -2,7 +2,7 @@ from src import DQN_implementation as dqn
 from os import remove
 from glob import glob
 
-identifier = "CartPole_q4"
+identifier = "CartPole_q3"
 
 # # remove previous files
 # for f in glob("./model/{}*.*".format(identifier)):

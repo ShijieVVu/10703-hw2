@@ -4,10 +4,11 @@ from random import random, randint, sample
 import argparse
 import gym
 import numpy as np
-from keras import Sequential
-from keras.layers import Dense
+from keras import Sequential, Model, Input
+from keras.layers import Dense, merge
 from keras.optimizers import Adam
 from pickle import dump
+from keras import backend as K
 
 
 class QNetwork:
@@ -30,6 +31,19 @@ class QNetwork:
                 Dense(30, input_shape=(30,), activation='relu'),
                 Dense(na, input_shape=(30,))
             ])
+            self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
+
+        # Duel DQN
+        if identifier == "CartPole_q4":
+            input = Input(shape=(ns,))
+            x = Dense(30, activation='relu')(input)
+            x = Dense(30, activation='relu')(x)
+            val_fc = Dense(30)(x)
+            val = Dense(1)(val_fc)
+            advantage_fc = Dense(30)(x)
+            advantage = Dense(na)(advantage_fc)
+            predictions = merge([val, advantage], mode=lambda y: y[0] + y[1] - K.mean(y[1]), output_shape=(na,))
+            self.model = Model(input, predictions)
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
     def save_model(self, name, iteration):
@@ -161,7 +175,7 @@ class DQN_Agent:
                     x_train = np.zeros((len(mini_batch), self.ns))
                     y_train = np.zeros((len(mini_batch), self.na))
                     for i1, (s1, a1, r1, s_1, done) in enumerate(mini_batch):
-                        q_values1 = self.net.qvalues(np.array([s1]))
+                        q_values1 = self.net.qvalues(np.array([s1]))[0]
                         if done:
                             q_values1[a1] = r1
                         else:
@@ -204,6 +218,7 @@ def parse_arguments():
 
 def main(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
          test_size, learning_rate, use_replay_memory):
-    agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate, use_replay_memory=use_replay_memory)
+    agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate,
+                      use_replay_memory=use_replay_memory)
     agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
                 eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size)
