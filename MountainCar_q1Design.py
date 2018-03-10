@@ -12,10 +12,10 @@ ns = env.observation_space.shape[0]
 na = env.action_space.n
 
 model = Sequential([
-    Dense(na, input_shape=(ns,), use_bias=False)
+    Dense(na, input_shape=(ns,))
 ])
 
-model.set_weights([np.array([[0, 0, 0], [1, 2, 3]])])
+model.set_weights([np.array([[0, 0, 0], [1, 2, 3]]), np.array([0, 0, 0.01])])
 
 test_size = 200
 
@@ -37,5 +37,8 @@ for _ in range(test_size):
             break
     y.append(i)
 print("The average reward of {} episodes is {}".format(test_size, rewards / test_size))
+plt.title("MountainCar Designed Linear Model (left at basin)")
+plt.ylabel("Episode reward")
+plt.xlabel("Initial location")
 plt.scatter(x, y)
 plt.show()

@@ -16,14 +16,14 @@ class QNetwork:
     def __init__(self, ns, na, identifier, learning_rate):
         self.model = None
         # linear model
-        if identifier == "CartPole_q1" or "CartPole_q2":
+        if identifier == "CartPole_q1" or "CartPole_q2" or "MountainCar_q1" or "MountainCar_q2":
             self.model = Sequential([
                 Dense(na, input_shape=(ns,))
             ])
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # MLP
-        if identifier == "CartPole_q3":
+        if identifier == "CartPole_q3" or "MountainCar_q3":
             self.model = Sequential([
                 Dense(30, input_shape=(ns,), activation='relu'),
                 Dense(30, input_shape=(30,), activation='relu'),
@@ -34,7 +34,7 @@ class QNetwork:
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # Duel DQN
-        if identifier == "CartPole_q4":
+        if identifier == "CartPole_q4" or "MountainCar_q4":
             input = Input(shape=(ns,))
             x = Dense(30, activation='relu')(input)
             x = Dense(30, activation='relu')(x)
@@ -199,26 +199,9 @@ class DQN_Agent:
         return rewards / test_size
 
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
-    parser.add_argument('--env', dest='env', type=str)
-    parser.add_argument('--render', dest='render', type=int, default=0)
-    parser.add_argument('--train', dest='train', type=int, default=1)
-    parser.add_argument('--model', dest='model_file', type=str)
-    parser.add_argument('--gamma', dest='gamma', type=float, default=0.99)
-    parser.add_argument('--epsilon', dest='epsilon', type=float, default=0.5)
-    parser.add_argument('--epsilon_decay', dest='epsilon_decay', type=float, default=4.5e-6)
-    parser.add_argument('--epsilon_min', dest='epsilon_min', type=float, default=0.05)
-    parser.add_argument('--max_iteration', dest='max_iteration', type=int, default=1000000)
-    parser.add_argument('--interval_iteration', dest='interval_iteration', type=int, default=10000)
-    parser.add_argument('--test_size', dest='test_size', type=int, default=20)
-    parser.add_argument('--identifier', dest='identifier', type=str, default=None)
-    return parser.parse_args()
-
-
 def main(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
          test_size, learning_rate, use_replay_memory):
     agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate,
                       use_replay_memory=use_replay_memory)
     agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
-                eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size)
+                eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size, )
