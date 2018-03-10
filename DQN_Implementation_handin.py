@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from random import random, randint, sample
 
-import argparse
 import gym
 import numpy as np
 from keras import Sequential, Model, Input
