@@ -113,6 +113,7 @@ class DQN_Agent:
         if random() <= eps:
             return randint(0, self.na - 1)
         else:
+            # break ties randomly
             return np.random.choice(np.flatnonzero(q_values == q_values.max()))
 
     def greedy_policy(self, q_values):
@@ -235,13 +236,13 @@ run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000,
 identifier = "CartPole_q2"
 run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=1000000, epsilon=0.5, epsilon_decay=4.5e-6,
         epsilon_min=0.05, interval_iteration=10000, gamma=0.99, test_size=20, learning_rate=0.002,
-        use_replay_memory=False, memory_size=50000, burn_in=10000)
+        use_replay_memory=True, memory_size=50000, burn_in=10000)
 
 # MountainCar-v0 q2
 identifier = "MountainCar_q2"
 run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.1, epsilon_decay=0.09e-6,
         epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0015,
-        use_replay_memory=True, memory_size=None, burn_in=None)
+        use_replay_memory=True, memory_size=50000, burn_in=10000)
 
 # QUESTION 3
 # CartPole-v0 q3
