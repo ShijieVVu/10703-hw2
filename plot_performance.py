@@ -1,7 +1,8 @@
 from matplotlib import pylab as plt
 from pickle import load
 
-name = 'CartPole_q1'
+name = 'CartPole_q2'
+# name = 'MountainCar_q2'
 
 data = load(open('./model/{}.p'.format(name), 'rb'))
 

@@ -16,14 +16,16 @@ class QNetwork:
     def __init__(self, ns, na, identifier, learning_rate):
         self.model = None
         # linear model
-        if identifier == "CartPole_q1" or "CartPole_q2" or "MountainCar_q1" or "MountainCar_q2":
+        if identifier == "CartPole_q1" or identifier == "CartPole_q2" or identifier == "MountainCar_q1" or identifier == "MountainCar_q2":
+            print("using linear model")
             self.model = Sequential([
                 Dense(na, input_shape=(ns,))
             ])
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # MLP
-        if identifier == "CartPole_q3" or "MountainCar_q3":
+        if identifier == "CartPole_q3" or identifier == "MountainCar_q3":
+            print("using MLP model")
             self.model = Sequential([
                 Dense(30, input_shape=(ns,), activation='relu'),
                 Dense(30, input_shape=(30,), activation='relu'),
@@ -34,7 +36,8 @@ class QNetwork:
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # Duel DQN
-        if identifier == "CartPole_q4" or "MountainCar_q4":
+        if identifier == "CartPole_q4" or identifier == "MountainCar_q4":
+            print("using dual DQN model")
             input = Input(shape=(ns,))
             x = Dense(30, activation='relu')(input)
             x = Dense(30, activation='relu')(x)
@@ -95,7 +98,7 @@ class Memory:
 
 class DQN_Agent:
 
-    def __init__(self, environment_name, identifier, learning_rate, use_replay_memory):
+    def __init__(self, environment_name, identifier, learning_rate, use_replay_memory, memory_size, burn_in):
         self.identifier = identifier
         self.env_name = environment_name
         self.env = gym.make(self.env_name)
@@ -103,7 +106,7 @@ class DQN_Agent:
         self.ns = self.env.observation_space.shape[0]
         self.net = QNetwork(self.ns, self.na, identifier, learning_rate)
         if use_replay_memory:
-            self.memory = Memory(environment_name)
+            self.memory = Memory(environment_name, memory_size, burn_in)
         self.use_replay = use_replay_memory
 
     def epsilon_greedy_policy(self, q_values, eps):
@@ -200,8 +203,8 @@ class DQN_Agent:
 
 
 def main(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
-         test_size, learning_rate, use_replay_memory):
+         test_size, learning_rate, use_replay_memory, memory_size, burn_in):
     agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate,
-                      use_replay_memory=use_replay_memory)
+                      use_replay_memory=use_replay_memory, memory_size=memory_size, burn_in=burn_in)
     agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
                 eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size, )
