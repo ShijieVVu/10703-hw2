@@ -11,8 +11,10 @@ from keras import backend as K
 from keras.layers.core import Activation, Dropout, Flatten, Dense
 import cv2
 import os
+
 # just to kill the warning
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 class QNetwork:
 
@@ -56,7 +58,7 @@ class QNetwork:
         # Space Invader Double DQN
         if identifier == "SpaceInvader":
             print("using double DQN model")
-            #normal DQN
+            # normal DQN
             self.model = Sequential()
             self.model.add(Conv2D(16, (8, 8), strides=(4, 4), input_shape=(84, 84, 4)))
             self.model.add(Activation('relu'))
@@ -67,7 +69,7 @@ class QNetwork:
             self.model.add(Activation('relu'))
             self.model.add(Dense(na))
             self.model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
-            #double DQN
+            # double DQN
             self.target = Sequential()
             self.target.add(Conv2D(16, (8, 8), strides=(4, 4), input_shape=(84, 84, 4)))
             self.target.add(Activation('relu'))
@@ -78,7 +80,6 @@ class QNetwork:
             self.target.add(Activation('relu'))
             self.target.add(Dense(na))
             self.target.compile(loss='mse', optimizer=Adam(lr=learning_rate))
-
 
     def save_model(self, name, iteration):
         self.model.save('./model/{}_{}.h5'.format(name, iteration))
@@ -141,23 +142,23 @@ class DQN_Agent:
         self.use_replay = use_replay_memory
         print("initilized")
 
-    #init an empty buffer that stores the tmp images
+    # init an empty buffer that stores the tmp images
     def buffer_init(self):
         self.buffer = []
         self.env.reset()
         s, _, _, _ = self.env.step(0)
-        self.buffer = [s,s,s,s]
+        self.buffer = [s, s, s, s]
 
     # convert those raw images to one frame
     def convert_buffer(self):
-        shape = (84,84)
+        shape = (84, 84)
         res = []
         downsampled = []
         for index in range(len(self.buffer)):
             gray = cv2.cvtColor(self.buffer[index], cv2.COLOR_RGB2GRAY)
-            downsampled.append(cv2.resize(gray,shape))
+            downsampled.append(cv2.resize(gray, shape))
         self.buffer = []
-        return np.reshape(downsampled,[84,84,4])
+        return np.reshape(downsampled, [84, 84, 4])
 
     # make the state for compressed image
     def step_wrapper(self, action):
@@ -191,7 +192,7 @@ class DQN_Agent:
             while iteration <= max_iteration:
                 start = iteration
                 s = self.env.reset()
-                #spaceinvader needs four image as one state
+                # spaceinvader needs four image as one state
                 if self.identifier == "SpaceInvader":
                     self.buffer_init()
                     s = self.convert_buffer()
@@ -209,16 +210,19 @@ class DQN_Agent:
                         mini_batch = self.memory.sample()
                         self.memory.remember((s, a, r, s_, done))
 
-                        if identifier == "SpaceInvader":
+                        if self.identifier == "SpaceInvader":
                             p = self.net.qvalues(np.array([i[0].reshape(84, 84, 4) for i in mini_batch]))
-                            p_ = self.net.qvalues(np.array([(i[3].reshape(84, 84, 4) if i[4] is not True else np.zeros(shape=(84,84,4))) for i in mini_batch]))
+                            p_ = self.net.qvalues(np.array(
+                                [(i[3].reshape(84, 84, 4) if i[4] is not True else np.zeros(shape=(84, 84, 4))) for i in
+                                 mini_batch]))
                         else:
                             p = self.net.qvalues(np.array([i[0] for i in mini_batch]))
-                            p_ = self.net.qvalues(np.array([(i[3] if i[4] is not True else np.zeros(self.ns)) for i in mini_batch]))
+                            p_ = self.net.qvalues(
+                                np.array([(i[3] if i[4] is not True else np.zeros(self.ns)) for i in mini_batch]))
 
                         x = np.zeros((len(mini_batch), self.ns))
                         if self.identifier == "SpaceInvader":
-                            x = np.zeros((len(mini_batch), 84,84,4))
+                            x = np.zeros((len(mini_batch), 84, 84, 4))
                         y = np.zeros((len(mini_batch), self.na))
 
                         for i, val in enumerate(mini_batch):
@@ -305,7 +309,7 @@ class DQN_Agent:
                 self.buffer_init()
                 s = self.convert_buffer()
                 while True:
-                    a = self.epsilon_greedy_policy(self.net.qvalues(s.reshape(1, 84, 84, 4)),1)
+                    a = self.epsilon_greedy_policy(self.net.qvalues(s.reshape(1, 84, 84, 4)), 1)
                     s_, r, done, _ = self.step_wrapper(a)
                     if done:
                         s_ = None
@@ -317,10 +321,10 @@ class DQN_Agent:
         else:
             iteration = 0
             while iteration <= self.memory.burn_in:
-                s = env.reset()
+                s = self.env.reset()
                 while True:
-                    a = env.action_space.sample()
-                    s_, r, done, _ = env.step(a)
+                    a = self.env.action_space.sample()
+                    s_, r, done, _ = self.env.step(a)
                     self.memory.remember((s, a, r, s_, done))
                     s = s_
                     iteration += 1
@@ -329,6 +333,7 @@ class DQN_Agent:
         print("Memory burned in with current index at {}".format(self.memory.length))
         print("Memory size is {}".format(self.memory.memory_size))
 
+
 def run_dqn(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
             test_size, learning_rate, use_replay_memory, memory_size, burn_in):
     agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate,
@@ -336,22 +341,21 @@ def run_dqn(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon
     agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
                 eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size, )
 
-
 # QUESTION 1
 # CartPole-v0 q1
-identifier = "CartPole_q1"
-run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=1000000, epsilon=0.5, epsilon_decay=4.5e-6,
-        epsilon_min=0.05, interval_iteration=10000, gamma=0.99, test_size=20, learning_rate=0.002,
-        use_replay_memory=False, memory_size=None, burn_in=None)
-
-# CartPole-v0 Linear Explore
-# See github link https://github.com/ShijieVVu/10703-hw2.git
-
-# MountainCar-v0 q1
-identifier = "MountainCar_q1"
-run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.1, epsilon_decay=0.09e-6,
-        epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0015,
-        use_replay_memory=False, memory_size=None, burn_in=None)
+# identifier = "CartPole_q1"
+# run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=1000000, epsilon=0.5, epsilon_decay=4.5e-6,
+#         epsilon_min=0.05, interval_iteration=10000, gamma=0.99, test_size=20, learning_rate=0.002,
+#         use_replay_memory=False, memory_size=None, burn_in=None)
+#
+# # CartPole-v0 Linear Explore
+# # See github link https://github.com/ShijieVVu/10703-hw2.git
+#
+# # MountainCar-v0 q1
+# identifier = "MountainCar_q1"
+# run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.1, epsilon_decay=0.09e-6,
+#         epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0015,
+#         use_replay_memory=False, memory_size=None, burn_in=None)
 
 # MountainCar-v0 Linear Design
 # See github link https://github.com/ShijieVVu/10703-hw2.git
@@ -359,47 +363,46 @@ run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000,
 
 # QUESTION 2
 # CartPole-v0 q2
-identifier = "CartPole_q2"
-run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=1000000, epsilon=0.5, epsilon_decay=4.5e-6,
-        epsilon_min=0.05, interval_iteration=10000, gamma=0.99, test_size=20, learning_rate=0.002,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
-
-# MountainCar-v0 q2
-identifier = "MountainCar_q2"
-run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.1, epsilon_decay=0.09e-6,
-        epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0015,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
+# identifier = "CartPole_q2"
+# run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=1000000, epsilon=0.5, epsilon_decay=4.5e-6,
+#         epsilon_min=0.05, interval_iteration=10000, gamma=0.99, test_size=20, learning_rate=0.002,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
+#
+# # MountainCar-v0 q2
+# identifier = "MountainCar_q2"
+# run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.1, epsilon_decay=0.09e-6,
+#         epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0015,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
 
 # QUESTION 3
 # CartPole-v0 q3
-identifier = "CartPole_q3"
-run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=100000, epsilon=0.5, epsilon_decay=4.5e-4,
-        epsilon_min=0.05, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.0001,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
+# identifier = "CartPole_q3"
+# run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=100000, epsilon=0.5, epsilon_decay=4.5e-4,
+#         epsilon_min=0.05, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.0001,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
 
-# MountainCar-v0 q3
-identifier = "MountainCar_q3"
-run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.25, epsilon_decay=0.2e-6,
-        epsilon_min=0.05, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0001,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
+# # MountainCar-v0 q3
+# identifier = "MountainCar_q3"
+# run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.25, epsilon_decay=4.5e-6,
+#         epsilon_min=0.05, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0001,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
+#
+# # QUESTION 4
+# # CartPole-v0 q4
+# identifier = "CartPole_q4"
+# -run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=20000, epsilon=1.0, epsilon_decay=9.5e-4,
+#         epsilon_min=0.05, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.0002,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
+#
+# # MountainCar-v0 q4
+# identifier = "MountainCar_q4"
+# run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.25, epsilon_decay=4.5e-6,
+#         epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0001,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
 
-# QUESTION 4
-# CartPole-v0 q4
-identifier = "CartPole_q4"
-run_dqn(env_name="CartPole-v0", identifier=identifier, max_iteration=20000, epsilon=1.0, epsilon_decay=4.75e-5,
-        epsilon_min=0.05, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.0002,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
-
-# MountainCar-v0 q4
-identifier = "MountainCar_q4"
-run_dqn(env_name="MountainCar-v0", identifier=identifier, max_iteration=1000000, epsilon=0.25, epsilon_decay=0.24e-6,
-        epsilon_min=0.01, interval_iteration=10000, gamma=1, test_size=20, learning_rate=0.0001,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
-
-
-#QUESTION extra
-#SpaceInvader
-identifier = "SpaceInvader"
-run_dqn(env_name="SpaceInvaders-v0", identifier=identifier, max_iteration=10000, epsilon=1, epsilon_decay=0.99e-4,
-        epsilon_min=0.01, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.00025,
-        use_replay_memory=True, memory_size=50000, burn_in=10000)
+# # QUESTION extra
+# # SpaceInvader
+# identifier = "SpaceInvader"
+# run_dqn(env_name="SpaceInvaders-v0", identifier=identifier, max_iteration=10000, epsilon=1, epsilon_decay=0.99e-4,
+#         epsilon_min=0.01, interval_iteration=1000, gamma=0.99, test_size=20, learning_rate=0.00025,
+#         use_replay_memory=True, memory_size=50000, burn_in=10000)
