@@ -12,19 +12,19 @@ from keras import backend as K
 
 class QNetwork:
 
-    def __init__(self, ns, na, identifier, learning_rate):
+    def __init__(self, ns, na, model_name, learning_rate):
         self.model = None
         # linear model
-        if identifier == "CartPole_q1" or identifier == "CartPole_q2" or identifier == "MountainCar_q1" or identifier == "MountainCar_q2":
-            print("using linear model")
+        if model_name == "linear":
+            print("Using linear model")
             self.model = Sequential([
                 Dense(na, input_shape=(ns,))
             ])
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # MLP
-        if identifier == "CartPole_q3" or identifier == "MountainCar_q3":
-            print("using MLP model")
+        if model_name == "MLP":
+            print("Using MLP model")
             self.model = Sequential([
                 Dense(30, input_shape=(ns,), activation='relu'),
                 Dense(30, input_shape=(30,), activation='relu'),
@@ -35,8 +35,8 @@ class QNetwork:
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
         # Duel DQN
-        if identifier == "CartPole_q4" or identifier == "MountainCar_q4":
-            print("using dual DQN model")
+        if model_name == "Duel DQN":
+            print("Using dual DQN model")
             input = Input(shape=(ns,))
             x = Dense(30, activation='relu')(input)
             x = Dense(30, activation='relu')(x)
@@ -98,13 +98,13 @@ class Memory:
 
 class DQN_Agent:
 
-    def __init__(self, environment_name, identifier, learning_rate, use_replay_memory, memory_size, burn_in):
+    def __init__(self, environment_name, identifier, model_name, learning_rate, use_replay_memory, memory_size, burn_in):
         self.identifier = identifier
         self.env_name = environment_name
         self.env = gym.make(self.env_name)
         self.na = self.env.action_space.n
         self.ns = self.env.observation_space.shape[0]
-        self.net = QNetwork(self.ns, self.na, identifier, learning_rate)
+        self.net = QNetwork(self.ns, self.na, model_name, learning_rate)
         if use_replay_memory:
             self.memory = Memory(environment_name, memory_size, burn_in)
         self.use_replay = use_replay_memory
@@ -199,9 +199,9 @@ class DQN_Agent:
         return rewards / test_size
 
 
-def main(env_name, identifier, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
+def main(env_name, identifier, model_name, max_iteration, epsilon, epsilon_decay, epsilon_min, interval_iteration, gamma,
          test_size, learning_rate, use_replay_memory, memory_size, burn_in):
-    agent = DQN_Agent(environment_name=env_name, identifier=identifier, learning_rate=learning_rate,
+    agent = DQN_Agent(environment_name=env_name, identifier=identifier, model_name=model_name, learning_rate=learning_rate,
                       use_replay_memory=use_replay_memory, memory_size=memory_size, burn_in=burn_in)
     agent.train(max_iteration=max_iteration, eps=epsilon, eps_decay=epsilon_decay,
                 eps_min=epsilon_min, interval_iteration=interval_iteration, gamma=gamma, test_size=test_size, )
