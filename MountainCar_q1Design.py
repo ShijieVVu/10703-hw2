@@ -1,4 +1,4 @@
-# Fully accelerate velocity
+# Experiment on linear model with policy to maximize momentum
 from matplotlib import pyplot as plt
 import gym
 
