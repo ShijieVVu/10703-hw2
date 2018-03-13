@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from random import random, randint, sample
 
-import argparse
 import gym
 import numpy as np
 from keras import Sequential, Model, Input
@@ -50,6 +49,7 @@ class QNetwork:
             self.model.compile(loss='mean_squared_error', optimizer=Adam(lr=learning_rate))
 
     def save_model(self, name, iteration):
+        # save to ./model/ directory
         self.model.save('./model/{}_{}.h5'.format(name, iteration))
         print('model saved to ./model/{}_{}.h5 on {} iteration'.format(name, iteration, iteration))
 
@@ -114,9 +114,6 @@ class DQN_Agent:
             return randint(0, self.na - 1)
         else:
             return np.random.choice(np.flatnonzero(q_values == q_values.max()))
-
-    def greedy_policy(self, q_values):
-        pass
 
     def train(self, max_iteration, eps, eps_decay, eps_min, interval_iteration, gamma, test_size):
         iteration = 0
