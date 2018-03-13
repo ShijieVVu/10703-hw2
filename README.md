@@ -1,6 +1,6 @@
 # 10703-hw2
 
-Model-free Implementation of Reinforcement Learning
+Model-free Reinforcement Learning Models with Experience Replay
 ======
 ## Installation
 Install dependencies
