@@ -15,7 +15,7 @@ model = Sequential([
     Dense(na, input_shape=(ns,))
 ])
 
-model.set_weights([np.array([[0, 0, 0], [1, 2, 3]]), np.array([0, 0, 0.01])])
+model.set_weights([np.array([[0, 0, 0], [1, 2, 3]]), np.array([0, 0, 0])])
 
 test_size = 200
 
@@ -35,9 +35,9 @@ for _ in range(test_size):
         if done:
             print("solved for {} iterations".format(i))
             break
-    y.append(i)
+    y.append(-i)
 print("The average reward of {} episodes is {}".format(test_size, rewards / test_size))
-plt.title("MountainCar Designed Linear Model (left at basin)")
+plt.title("MountainCar Designed Linear Model")
 plt.ylabel("Episode reward")
 plt.xlabel("Initial location")
 plt.scatter(x, y)
